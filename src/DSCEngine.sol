@@ -36,6 +36,8 @@ contract DSCEngine is ReentrancyGuard{
     error DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
     error DSCEngine__NotAllowedToken();
     error DSCEngine__transferFailed();
+    error DSCEngine__BreaksHealthFactor(uint256 healthFactor);
+    error DSCEngine__MintFailed();
     
     //////////////////////////
     ///State Variables   /////   
@@ -43,6 +45,9 @@ contract DSCEngine is ReentrancyGuard{
 
     uint256 private constant ADDITIONAL_FEED_PRECISION=1e10;
     uint256 private constant PRECISION=1e10;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50;
+    uint256 private constant LIQUIDATION_PRECISION= 100;
+    uint256 private constant MIN_HEALTH_FACTOR=1;
 
     mapping(address token=>address priceFeeds) private s_priceFeeds;
     mapping(address user=>mapping(address token => uint256 amount)) private s_CollateralDeposited;
@@ -89,7 +94,8 @@ contract DSCEngine is ReentrancyGuard{
                     }
 
                     for(uint256 i=0;i<tokenAddresses.length;i++){
-                        s_priceFeeds[i]=pricefeedAddresses[i];
+                        
+                        s_priceFeeds[tokenAddresses[i]]=pricefeedAddresses[i];
                         s_collateralTokens.push(tokenAddresses[i]);                   
                     }
 
@@ -142,6 +148,10 @@ contract DSCEngine is ReentrancyGuard{
         // if they minted to much exmaple: if they minted 150$ DSC but they only has 100$ worth of ETH, that ways to much, we should 
         // 100 % revert if that happens
         _revertIFHealthFactorIsBroken(msg.sender);
+        bool minted = i_dsc.mint(msg.sender,amountDscToMint );
+        if(!minted){
+            revert DSCEngine__MintFailed();
+        }
     }
 
     function burnDsc() external {}
@@ -160,9 +170,9 @@ contract DSCEngine is ReentrancyGuard{
      * If a user goes below 1, then they get liquidated 
      */
 
-    function _getAccountInformation(address user) private view returns(uint256 totalDscMinted,uint256 collateralValueInUsd) internal {
+    function _getAccountInformation(address user) private view returns(uint256 totalDscMinted,uint256 collateralValueInUsd)  {
 
-        totalDscminted = s_DSCMinted[user];
+        totalDscMinted = s_DSCMinted[user];
         collateralValueInUsd = getAccountCollateralValue(user);        
     }
 
@@ -172,12 +182,21 @@ contract DSCEngine is ReentrancyGuard{
         //1. total DSC Minted
         //2. total collateral value
         (uint256 totalDscMinted, uint256  collateralValueInUsd) = _getAccountInformation(user);
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd*LIQUIDATION_THRESHOLD) /LIQUIDATION_PRECISION;
+        return (collateralValueInUsd*PRECISION)/totalDscMinted;
+
+        //This will give true healt factor and if its less than one we will get liquidated.
 
     }
 
     function _revertIFHealthFactorIsBroken(address user) internal view{
         // 1. Check health factor (do they have enough collateral?)
         // 2. Revert if they dont have good health factor
+
+        uint256 userhealthFactor = _healthFactor(user);
+        if(userhealthFactor<MIN_HEALTH_FACTOR){
+            revert DSCEngine__BreaksHealthFactor(userhealthFactor);
+        }
 
     }
 
@@ -199,11 +218,11 @@ contract DSCEngine is ReentrancyGuard{
     }
 
     function getUsdValue(address token, uint256 amount) public view returns(uint256 ){
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds(token));
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
         (,int256 price,,,) = priceFeed.latestRoundData();
         // The returned price will have 8 decimal places so if suppose 1 ETH = 1000$ then the returned value is 1000*1e8
 
-        return (uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
+        return ((uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
     }
 
 }
