@@ -3,7 +3,7 @@
 pragma solidity ^0.8.16;
 
 import {DecentralizedStableCoin} from "../src/DecentralizedStableCoin.sol";
-import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
  
@@ -44,7 +44,7 @@ contract DSCEngine is ReentrancyGuard{
     //////////////////////////
 
     uint256 private constant ADDITIONAL_FEED_PRECISION=1e10;
-    uint256 private constant PRECISION=1e10;
+    uint256 private constant PRECISION=1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
     uint256 private constant LIQUIDATION_PRECISION= 100;
     uint256 private constant MIN_HEALTH_FACTOR=1;
@@ -109,7 +109,20 @@ contract DSCEngine is ReentrancyGuard{
     ///External Functions   /////   
     ///////////////////////////// 
 
-    function depositCollateralandMintDsc() external {}
+    /**
+     * 
+     * @param tokenCollateralAddress The address of the token depositing as collateral
+     * @param amountCollateral The amount of collateral to deposit
+     * @param amountDscToMint The amount of decentralized stable coint to mint
+     * @notice this function will deposit your collateral and mint dsc in one transaction
+     */
+
+    function depositCollateralandMintDsc(address tokenCollateralAddress, 
+                        uint256 amountCollateral,  uint256 amountDscToMint) 
+            external {
+                depositCollateral(tokenCollateralAddress, amountCollateral);
+                mintDsc(amountDscToMint);
+            }
 
     /**
      * 
@@ -118,7 +131,7 @@ contract DSCEngine is ReentrancyGuard{
      */
     function depositCollateral(
                 address tokenCollateralAddress, 
-                uint256 amountCollateral) external 
+                uint256 amountCollateral) public 
                 moreThanZero(amountCollateral)
                 isAllowedToken(tokenCollateralAddress)
                 nonReentrant
@@ -143,7 +156,7 @@ contract DSCEngine is ReentrancyGuard{
      * @param amountDscToMint The amount of decentralized stable coin to mint
      * @notice Collateral must be greater than the minimum threashold value
      */
-    function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant{
+    function mintDsc(uint256 amountDscToMint) public moreThanZero(amountDscToMint) nonReentrant{
         s_DSCMinted[msg.sender] += amountDscToMint;
         // if they minted to much exmaple: if they minted 150$ DSC but they only has 100$ worth of ETH, that ways to much, we should 
         // 100 % revert if that happens
@@ -223,6 +236,8 @@ contract DSCEngine is ReentrancyGuard{
         // The returned price will have 8 decimal places so if suppose 1 ETH = 1000$ then the returned value is 1000*1e8
 
         return ((uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
+        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amount) / PRECISION;
+
     }
 
 }
