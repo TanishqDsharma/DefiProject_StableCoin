@@ -60,7 +60,8 @@ contract DSCEngine is ReentrancyGuard{
     ///events   /////   
     ///////////////////
 
-    event CollateralDeposited(address indexed user, address indexed token, uint256 amount);
+    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
 
     ////////////////////
     ///Modifiers   /////   
@@ -144,11 +145,38 @@ contract DSCEngine is ReentrancyGuard{
                     }
                 }
                 
-        
+    /**
+     * 
+     * @param tokenCollateralAddress The address of the token depositing as collateral
+     * @param amountCollateral The amount of collateral to deposit
+     * @param amountDscToBurn The amount of decentralized stable coint to burn
+     * @notice this function burns DSC and reedeem underlying collateral in one transaction
+     */
 
-    function redeemCollateraltoDsc() external {}
+    function redeemCollateraltoDsc(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToBurn) 
+        external {
+            burnDsc(amountDscToBurn);
+            reedeemCollateral(tokenCollateralAddress,amountCollateral);
+            // the reedeemCollateral already checks for health factor.
+        }
 
-    function reedeemCollateral() external{}
+    // In order to reedeem collateral:
+    // 1) health factor must be over 1 after collateral pulled 
+
+
+    
+    function reedeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) 
+                public moreThanZero(amountCollateral)
+                nonReentrant{
+                    s_CollateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+                    //Since we are changing the state lets emit an event 
+                    emit CollateralRedeemed(msg.sender,tokenCollateralAddress,amountCollateral);
+                    bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
+                    if(!success){
+                        revert DSCEngine__transferFailed();
+                    }
+                    _revertIFHealthFactorIsBroken(msg.sender);
+                }
 
     //1) In order to mint DSC we need to check collateral value >DSC amount
     /**
@@ -167,7 +195,16 @@ contract DSCEngine is ReentrancyGuard{
         }
     }
 
-    function burnDsc() external {}
+    function burnDsc(uint256 amount) public moreThanZero(amount){
+        s_DSCMinted[msg.sender]-=amount;
+        bool success = i_dsc.transferFrom(msg.sender, address(this),amount);
+        if(!success){
+            revert DSCEngine__transferFailed();
+        }
+        i_dsc.burn(amount);
+        _revertIFHealthFactorIsBroken(msg.sender);
+
+    }
 
     function liquidate() external {}
 
