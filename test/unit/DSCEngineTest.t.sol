@@ -22,16 +22,36 @@ DSCEngine dsce;
 DecentralizedStableCoin dsc;
 HelperConfig config;
 address ethUsdPriceFeed;
+address btcUsdPriceFeed;
 address weth;
+address wbtc;
 address user = makeAddr("USER");
 
     function setUp() public{
         deployer = new DeployDSC();
         (dsc,dsce,config) = deployer.run();
-        (ethUsdPriceFeed,,weth,,) = config.activeNetworkConfig();
+        (ethUsdPriceFeed,btcUsdPriceFeed,weth,wbtc,) = config.activeNetworkConfig();
         vm.deal(user,STARTING_BALANCE);
         ERC20Mock(weth).mint(user,ERC20_STARTING_BALANCE);
     }
+
+
+    ///////////////////////
+   // Constructor Tests ///
+  ////////////////////////
+
+  address[] public tokenAddresses;
+  address[] public priceFeedAddresses;
+
+  function testIfTokenLengthDoesntMatchPriceFeeds() public{
+        tokenAddresses.push(weth);
+        priceFeedAddresses.push(ethUsdPriceFeed);
+        priceFeedAddresses.push(btcUsdPriceFeed);
+        vm.expectRevert(DSCEngine.DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength.selector);
+        new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
+
+  }
+
 
     ////////////////////
    ///// Price Tests ///
@@ -43,6 +63,14 @@ function testGetUsdValue() public {
     uint256 expectedUSD = 52500e18;
     uint256 actualUSD = dsce.getUsdValue(weth,ethAmount);
     assert(expectedUSD==actualUSD);
+}
+
+function testGetTokenAmountFromUsd() public{
+    uint256 usdAmount = 35 ether;
+    // 3500$ per ETH, 100$ = 35/3500 = 0.01 eth
+    uint256 expectedWeth = 0.01 ether;
+    uint256 actualWeth = dsce.getTokenAmountFromUsd(weth,usdAmount);
+    assertEq(expectedWeth,actualWeth);
 }
 
 ///////////////////////////////////
