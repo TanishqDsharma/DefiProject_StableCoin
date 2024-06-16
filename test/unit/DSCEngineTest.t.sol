@@ -13,7 +13,7 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 
 contract DSCEngineTest is Test{
 
-uint256 public constant STARTING_BALANCE =1e18;
+uint256 public constant STARTING_BALANCE =10e18;
 uint256 public constant AMOUNT_COLLATERAL = 10 ether;
 uint256 public constant ERC20_STARTING_BALANCE = 10 ether;
 
@@ -31,7 +31,7 @@ address user = makeAddr("USER");
         deployer = new DeployDSC();
         (dsc,dsce,config) = deployer.run();
         (ethUsdPriceFeed,btcUsdPriceFeed,weth,wbtc,) = config.activeNetworkConfig();
-        vm.deal(user,STARTING_BALANCE);
+
         ERC20Mock(weth).mint(user,ERC20_STARTING_BALANCE);
     }
 
@@ -87,4 +87,33 @@ function testRevertsIfCollateralZero() public {
 
 }
 
+function testRevertswithUnapprovedCollateral() public{
+    ERC20Mock ranToken = new ERC20Mock("RAN","RAN",user,AMOUNT_COLLATERAL);
+    vm.startPrank(user);
+    vm.expectRevert();
+    dsce.depositCollateral(address(ranToken),AMOUNT_COLLATERAL);
+    vm.stopPrank();
+
+}
+
+modifier depositCollateral(){
+    vm.startPrank(user);
+    ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+    dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+    
+    vm.stopPrank();
+    _;
+}
+
+
+function testCanDepositCollateralAndGetAccountInfo() public depositCollateral {
+    
+    (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(user);
+    console.log("totalDscMinted is:",totalDscMinted);
+    console.log("collateralValueInUsd is:",collateralValueInUsd);
+    uint256 expectedTotalDscMinted = 0;
+    uint256 expectedDepositedAmount = dsce.getTokenAmountFromUsd(weth, collateralValueInUsd);
+    assertEq(totalDscMinted, expectedTotalDscMinted);
+    assertEq(AMOUNT_COLLATERAL,expectedDepositedAmount);
+}
 }
