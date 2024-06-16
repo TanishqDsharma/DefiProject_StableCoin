@@ -142,11 +142,11 @@ contract DSCEngine is ReentrancyGuard{
                 nonReentrant
                 {
                     s_CollateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
-                    emit CollateralDeposited(msg.sender,tokenCollateralAddress,amountCollateral);
-                    bool success = IERC20(i_dsc).transferFrom(msg.sender, address(this), amountCollateral);
-                    if(!success){
-                        revert DSCEngine__transferFailed();
-                    }
+        emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
+        bool success = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral);
+        if (!success) {
+            revert DSCEngine__transferFailed();
+        }
                 }
                 
     /**
@@ -337,7 +337,7 @@ contract DSCEngine is ReentrancyGuard{
         for(uint256 i=0;i<s_collateralTokens.length;i++){
             address token = s_collateralTokens[i];
             uint256 amount = s_CollateralDeposited[user][token];
-            totalCollateralValueInUsd =  getUsdValue(token,amount);
+            totalCollateralValueInUsd +=  getUsdValue(token,amount);
         }
         return totalCollateralValueInUsd;
     }
@@ -351,4 +351,11 @@ contract DSCEngine is ReentrancyGuard{
 
     }
 
+    function getAccountInformation(address user)
+    external
+    view
+    returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
+{
+    return _getAccountInformation(user);
+}
 }
